@@ -1,0 +1,438 @@
+---
+title: "Capstone2"
+author: "Gustavo Lobo"
+date: "25 de junio de 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+    library(tm)
+    library(dplyr)
+    library(stringi)
+```
+
+```{r loadData, warning=FALSE, cache=TRUE}
+    ## 1. Load data
+    twitFile <- readLines("final/en_US/en_US.twitter.txt")
+    blogFile <- readLines("final/en_US/en_US.blogs.txt")
+    newsFile <- readLines("final/en_US/en_US.news.txt")
+
+    ### 1.1 Summary of the source files (size, lines, words)
+    twitSize <- object.size(twitFile)/1064/1064
+    twitLines <- length(twitFile)
+    twitWords <- sum(sapply(gregexpr("\\S+", twitFile), length))
+    
+    blogSize <- object.size(blogFile)/1064/1064
+    blogLines <- length(blogFile)
+    blogWords <- sum(sapply(gregexpr("\\S+", blogFile), length))
+    
+    newsSize <- object.size(newsFile)/1064/1064
+    newsLines <- length(newsFile)
+    newsWords <- sum(sapply(gregexpr("\\S+", newsFile), length))
+    
+    sourceInfo <- data.frame(SizeMB = c(twitSize, blogSize, newsSize), 
+                            Lines = c(twitLines, blogLines, newsLines), 
+                            Words = c(twitWords, blogWords, newsWords), 
+                            row.names = c("Twits", "Blogs", "News"))
+    
+    sourceInfo
+    
+    ## 2. Split data train / test / validation
+    ### 2.1 Train data
+    dir.create("train", showWarnings = FALSE)
+    twitTrain <- twitFile[1:(0.2*twitLines)]
+    write(twitTrain, "train/twitTrain.txt")   
+    blogTrain <- blogFile[1:(0.2*blogLines)]
+    write(blogTrain, "train/blogTrain.txt")
+    newsTrain <- newsFile[1:(0.2*newsLines)]
+    write(newsTrain, "train/newsTrain.txt") 
+    
+    ### 2.2 Test data
+    dir.create("test", showWarnings = FALSE)
+    twitTest <- twitFile[(0.2*twitLines+1):(0.8*twitLines)]
+    write(twitTest, "test/twitsTest.txt") 
+    blogTest <- blogFile[(0.2*blogLines+1):(0.8*blogLines)]
+    write(blogTest, "test/blogTest.txt") 
+    newsTest <- newsFile[(0.2*newsLines+1):(0.8*newsLines)]
+    write(newsTest, "test/newsTest.txt") 
+    
+    ### 2.3 Validation data
+    dir.create("validation", showWarnings = FALSE)
+    twitVali <- twitFile[(0.8*twitLines+1):(twitLines)]
+    write(twitVali, "validation/twitVali.txt") 
+    blogVali <- blogFile[(0.8*blogLines+1):(blogLines)]
+    write(blogVali, "validation/blogVali.txt") 
+    newsVali <- newsFile[(0.8*newsLines+1):(newsLines)]
+    write(newsVali, "validation/newsVali.txt") 
+   
+    remove(twitWords, twitLines, twitSize, twitTrain, twitTest, twitVali, twitFile, 
+           blogWords, blogLines, blogSize, blogTrain, blogTest, blogVali, blogFile,
+           newsWords, newsLines, newsSize, newsTrain, newsTest, newsVali, newsFile)
+    
+    ## 3. Clean train data
+    
+    ## A) Preserving stop words and no stemming
+    ### 3.1 Load train data into corpus
+    dName <- file.path("~", "Documents/Coursera/Capstone", "train")
+    docsUS <- Corpus(DirSource(dName))
+    
+    ### 3.2 Clean data and write results to text files
+    docsUS <- tm_map(docsUS, content_transformer(PlainTextDocument))
+    docsUS <- tm_map(docsUS, content_transformer(removePunctuation))
+    docsUS <- tm_map(docsUS, content_transformer(tolower))
+    docsUS <- tm_map(docsUS, content_transformer(removeNumbers))
+    docsUS <- tm_map(docsUS, content_transformer(stripWhitespace))
+
+    dir.create("clean", showWarnings = FALSE)
+    writeCorpus(docsUS, path = "./clean")
+
+    twitFile <- readLines("clean/en_US.twitter.txt.txt")
+    blogFile <- readLines("clean/en_US.blogs.txt.txt")
+    newsFile <- readLines("clean/en_US.news.txt.txt")
+
+    # Function to remove special characters
+    cleanText <- function(data){
+        for (i in 1:length(data)){
+            data[i] <- gsub(" +"," ",gsub("^ +", "", gsub("[^a-zA-Z0-9 ]", "", data[i])))
+        }    
+        return(data)
+    }  
+
+    twitFile <- cleanText(twitFile)
+    blogFile <- cleanText(blogFile)
+    newsFile <- cleanText(newsFile)
+    
+    dir.create("final", showWarnings = FALSE)
+    write(twitSample, "final/twitTrain.txt")
+    write(blogSample, "final/blogTrain.txt")
+    write(newsSample, "final/newsTrain.txt")
+        
+    ### 3.3 Summary of the train files
+    twitSize <- object.size(twitFile)/1064/1064
+    twitLines <- length(twitFile)
+    twitWords <- sum(sapply(gregexpr("\\S+", twitFile), length))
+    
+    blogSize <- object.size(blogFile)/1064/1064
+    blogLines <- length(blogFile)
+    blogWords <- sum(sapply(gregexpr("\\S+", blogFile), length))
+    
+    newsSize <- object.size(newsFile)/1064/1064
+    newsLines <- length(newsFile)
+    newsWords <- sum(sapply(gregexpr("\\S+", newsFile), length))
+    
+    trainInfo <- data.frame(SizeMB = c(twitSize, blogSize, newsSize), 
+                            Lines = c(twitLines, blogLines, newsLines), 
+                            Words = c(twitWords, blogWords, newsWords), 
+                            row.names = c("Twits", "Blogs", "News"))
+    
+    trainInfo
+    
+    ## Percentage of words vs data source is better, because don't have to clean more
+
+    remove(twitFile, blogFile, newsFile)
+    
+    ## 4. Create document term matrix
+    dName <- file.path("~", "Documents/Coursera/Capstone", "final")
+    docUS_train <- Corpus(DirSource(dName))
+    
+    ### 4.1 Functions to create bigrams and trigrams 
+    BigramTokenizer <- function(x)
+        unlist(lapply(ngrams(words(x), 2), paste, collapse = " "), use.names = FALSE)
+    
+    TrigramTokenizer <- function(x)
+        unlist(lapply(ngrams(words(x), 3), paste, collapse = " "), use.names = FALSE)
+
+    ### 4.2 Create bigrams and trigrams and save results
+    
+    # Function to count frequency of terms
+    freq_df <- function(tdm){
+        freq <- sort(rowSums(as.matrix(tdm)), decreasing=TRUE)
+        freq_df <- data.frame(word=names(freq), freq=freq)
+        return(freq_df)
+        }
+
+    bigram <- TermDocumentMatrix(docUS_train, control = list(tokenize = BigramTokenizer))
+    bigram <- removeSparseTerms(bigram, 0.6)
+    bigram_freq <- freq_df(bigram)
+    bigram_freq$word <- as.character(bigram_freq$word)
+    save(bigram_freq, file="bigram_freq.Rda")
+    
+    trigram <- TermDocumentMatrix(docUS_train, control = list(tokenize = TrigramTokenizer))
+    trigram <- removeSparseTerms(trigram, 0.6)
+    trigram_freq <- freq_df(trigram)
+    trigram_freq$word <- as.character(trigram_freq$word)
+    save(trigram_freq, file="trigram_freq.Rda")
+    
+    remove(bigram, trigram)
+    
+    ## 4.3 Split bigrams and trigrams
+    # This step is done in order to 1) use memory more efficiently and 
+    # 2) be able to suggest words that are not the most common case
+    
+    ### 4.3.1 Bigrams with less frequency
+    # This less frequent bigrams aren't just droped or replaced with 'unkn', instead they're
+    # stemmized and grouped in order to extract all the 'juice' we can from our data
+    bigram_bottom <- filter(bigram_freq, freq<=3)
+    bigram_top <- filter(bigram_freq, freq>3)
+    
+    save(bigram_bottom,file="bigram_bottom_freq.Rda")
+    save(bigram_top,file="bigram_top_freq.Rda")
+    
+    trigram_top <- filter(trigram_freq, freq>3)
+    trigram_bottom <- filter(trigram_freq, freq<=3)
+    
+    save(trigram_top,file="trigram_top_freq.Rda")
+    save(trigram_bottom,file="trigram_bottom_freq.Rda")
+    
+    wordCount <- data.frame(type="bigram", word=nrow(bigram_freq), freq=sum(bigram_freq$freq))
+    
+    wordCount <- rbind(wordCount, 
+                       data.frame(type="trigram", word=nrow(trigram_freq), freq=sum(trigram_freq$freq)))
+    save(wordCount,file="wordCount.Rda")
+    
+    
+    remove(bigram_bottom_corpus, bigram_bottom_freq, bigBottom, bigramBottom_freq,
+           bigram_freq, bigram_bottom, bigram_top_freq)
+    remove(trigram_freq, trigram_bottom, trigram_top_freq, wordCount)
+    
+    ## B) Removing stop words and stemming data
+    # We produced another set of bigrams and trigrams in order to test the sensibility of the model
+    # to stop words and stemming
+    docsUS_NSS <- tm_map(docsUS, content_transformer(removeWords), stopwords('english'))
+    docsUS_NSS <- tm_map(docsUS_NSS, content_transformer(removeWords), stopwords('english'))
+    docsUS_NSS <- tm_map(docsUS_NSS, content_transformer(stemDocument), language = "english")
+    dir.create("clean_NSS", showWarnings = FALSE)
+    writeCorpus(docsUS, path = "./clean_NSS")
+    remove(docUS, docsUS_NSS)
+    
+    twitFile <- readLines("clean_NSS/en_US.twitter.txt.txt")
+    blogFile <- readLines("clean_NSS/en_US.blogs.txt.txt")
+    newsFile <- readLines("clean_NSS/en_US.news.txt.txt")
+
+    twitFile <- cleanText(twitFile)
+    blogFile <- cleanText(blogFile)
+    newsFile <- cleanText(newsFile)
+    
+    dir.create("final_NSS", showWarnings = FALSE)
+    write(twitSample, "final_NSS/twitTrain.txt")
+    write(blogSample, "final_NSS/blogTrain.txt")
+    write(newsSample, "final_NSS/newsTrain.txt")
+    
+    ### Summary of the train files
+    twitSize <- object.size(twitFile)/1064/1064
+    twitLines <- length(twitFile)
+    twitWords <- sum(sapply(gregexpr("\\S+", twitFile), length))
+    
+    blogSize <- object.size(blogFile)/1064/1064
+    blogLines <- length(blogFile)
+    blogWords <- sum(sapply(gregexpr("\\S+", blogFile), length))
+    
+    newsSize <- object.size(newsFile)/1064/1064
+    newsLines <- length(newsFile)
+    newsWords <- sum(sapply(gregexpr("\\S+", newsFile), length))
+    
+    trainInfo <- data.frame(SizeMB = c(twitSize, blogSize, newsSize), 
+                            Lines = c(twitLines, blogLines, newsLines), 
+                            Words = c(twitWords, blogWords, newsWords), 
+                            row.names = c("Twits", "Blogs", "News"))
+    
+    trainInfo
+    
+    remove(twitFile, blogFile, newsFile)
+    
+    ## 4. Create document term matrix
+    dName <- file.path("~", "Documents/Coursera/Capstone", "final_NSS")
+    docUS_train <- Corpus(DirSource(dName))
+    
+    bigram <- TermDocumentMatrix(docUS_train, control = list(tokenize = BigramTokenizer))
+    #bigram <- removeSparseTerms(bigram, 0.9)
+    bigram_freq <- freq_df(bigram)
+    bigram_freq$word <- as.character(bigram_freq$word)
+    save(bigram_freq,file="bigram_NSS.Rda")
+    
+    trigram <- TermDocumentMatrix(docUS_train, control = list(tokenize = TrigramTokenizer))
+    #trigram <- removeSparseTerms(trigram, 0.9)
+    trigram_freq <- freq_df(trigram)
+    trigram_freq$word <- as.character(trigram_freq$word)
+    save(trigram_freq,file="trigram_NSS.Rda")
+    
+    remove(bigram, trigram)
+    
+    bigram_bottom <- filter(bigram_freq, freq<=3)
+    bigram_top1 <- filter(bigram_freq, freq>5000)
+    bigram_top2 <- filter(bigram_freq, freq<=5000 & freq>500)
+    bigram_top3 <- filter(bigram_freq, freq<=500 & freq>3)
+    save(bigram_bottom,file="bigram_bottom_NSS.Rda")
+    save(bigram_top1,file="bigram_top1_NSS.Rda")
+    save(bigram_top2,file="bigram_top2_NSS.Rda")
+    save(bigram_top3,file="bigram_top3_NSS.Rda")
+    
+    remove(bigram_freq, bigram_bottom, bigram_top1, bigram_top2, bigram_top3)
+    
+    trigram_top1 <- filter(trigram_freq, freq>2000)
+    trigram_top2 <- filter(trigram_freq, freq<=1000 & freq>100)
+    trigram_top3 <- filter(trigram_freq, freq<=100 & freq>3)
+    trigram_bottom <- filter(trigram_freq, freq<=3)
+    
+    save(trigram_top1,file="trigram_top1_NSS.Rda")
+    save(trigram_top2,file="trigram_top2_NSS.Rda")
+    save(trigram_top3,file="trigram_top3_NSS.Rda")
+    save(trigram_bottom,file="trigram_bottom_NSS.Rda")
+    
+    remove(trigram_freq, trigram_bottom, trigram_top1, trigram_top2, trigram_top3)
+```
+
+```{r prediction}
+
+    nextWord <- function(firstWord, secondWord="", onlytheBest=FALSE) {
+        # Defines a unigram with the first of the given words
+        # unigram1 <- paste("^", firstWord, " ", sep = "")
+        
+        # Step# 1: Defines a bigram with the two given words and searches for it on trigrams
+        bigramCount <- wordCount[1,2]
+        trigramCount <- wordCount[2,2]
+        SWt1 <- data.frame(word="ukn", freq=1, prob=1/trigramCount)
+        SWb1 <- data.frame(word="ukn", freq=1, prob=1/bigramCount)
+        SWb2 <- data.frame(word="ukn", freq=1, prob=1/bigramCount)
+        SWb3 <- data.frame(word="ukn", freq=1, prob=1/bigramCount)
+        
+        if (firstWord != "" & secondWord == "") {
+            unigram <- paste("^", firstWord, " ", sep = "")
+            ftUnigram <- bigram_top[grepl(unigram, bigram_top$word), ]
+            if (nrow(ftUnigram)>0) {
+                SWb1 <- ftUnigram[which(ftUnigram$freq == max(ftUnigram$freq)), ]
+                SWb1$prob <- 0.4 * SWb1$freq / sum(ftUnigram$freq)
+                SWb1$word <- tail(strsplit(SWb1$word,split=" ")[[1]],1)
+            }
+            result <- SWb1
+        } else {
+            if (firstWord != "" & secondWord != "") {
+                trigram <- paste("^", firstWord, " ", secondWord, " ", sep = "")
+                ftTrigram <- trigram_top[grepl(trigram, trigram_top$word), ]
+            
+                bigram <- paste("\\<", firstWord, " ", secondWord, "\\>", sep = "")
+                ftBigram <- bigram_top[grepl(bigram, bigram_top$word), ]
+                #ftBigram <- ftBigram[which(ftBigram$freq == max(ftBigram$freq)), ]
+                if (nrow(ftBigram) > 0 & nrow(ftTrigram) > 0) {
+                    SWt1 <- ftTrigram[which(ftTrigram$freq == max(ftTrigram$freq)), ]
+                    SWt1$prob <- SWt1$freq / ftBigram$freq
+                    SWt1$word <- tail(strsplit(SWt1$word, split=" ")[[1]],1)
+                } else {
+                    unigram <- paste("^", firstWord, " ", sep = "")
+                    ftUnigram <- bigram_top[grepl(unigram, bigram_top$word), ]
+                    if (nrow(ftBigram) > 0 & nrow(ftUnigram)>0) {
+                        SWb2 <- ftBigram[which(ftBigram$freq == max(ftBigram$freq)), ]
+                        SWb2$prob <- 0.4 * SWb2$freq / sum(ftUnigram$freq)
+                        SWb2$word <- tail(strsplit(SWb2$word,split=" ")[[1]],1)
+                    }  
+                }
+            }
+            if (secondWord != "") {
+                unigram <- paste("^", secondWord, " ", sep = "")
+                ftUnigram <- bigram_top[grepl(unigram, bigram_top$word), ]
+                if (nrow(ftUnigram)>0) {
+                    SWb3 <- ftUnigram[which(ftUnigram$freq == max(ftUnigram$freq)), ]
+                    SWb3$prob <- 0.4 * SWb3$freq / sum(ftUnigram$freq)
+                    SWb3$word <- tail(strsplit(SWb3$word,split=" ")[[1]],1)
+                }
+            }
+            result <- rbind(SWt1, SWb2, SWb3)
+            if (onlytheBest) {
+                result <- result[which(result$prob == max(result$prob)), ][1,]  
+            }
+        }
+        
+        return(result)
+                
+    }
+
+```
+
+``` {r test_model}
+    
+    sampleSize <- 0.0001
+    twitSample <- readLines("test/twitTest.txt")
+    twitSample <- sample(twitSample, sampleSize*length(twitSample))
+    Encoding(twitSample) <- "latin1"
+    twitSample <- iconv(twitSample, "latin1", "ASCII", sub="")
+    
+    blogSample <- readLines("test/blogTest.txt")
+    blogSample <- sample(blogSample, sampleSize*length(blogSample))
+    Encoding(blogSample) <- "latin1"
+    blogSample <- iconv(blogSample, "latin1", "ASCII", sub="")    
+    
+    newsSample <- readLines("test/newsTest.txt")
+    newsSample <- sample(newsSample, sampleSize*length(newsSample))
+    Encoding(newsSample) <- "latin1"
+    newsSample <- iconv(newsSample, "latin1", "ASCII", sub="")
+    
+    dir.create("model_test", showWarnings = FALSE)
+
+    write(twitSample, "model_test/twitSample.txt") 
+    write(blogSample, "model_test/blogSample.txt") 
+    write(newsSample, "model_test/newsSample.txt")
+    
+    remove(sampleSize, twitSample, blogSample, newsSample)
+    
+    dName <- file.path("~", "Documents/Coursera/Capstone", "model_test")
+    corpusTest <- Corpus(DirSource(dName))
+    corpusTest <- tm_map(corpusTest, content_transformer(PlainTextDocument))
+    corpusTest <- tm_map(corpusTest, content_transformer(removePunctuation))
+    corpusTest <- tm_map(corpusTest, content_transformer(tolower))
+    corpusTest <- tm_map(corpusTest, content_transformer(removeNumbers))
+    corpusTest <- tm_map(corpusTest, content_transformer(stripWhitespace))
+    
+    bigram <- TermDocumentMatrix(corpusTest, control = list(tokenize = BigramTokenizer))
+    #bigram <- removeSparseTerms(bigram, 0.6)
+    bigram_freq <- freq_df(bigram)
+    bigram_freq$word <- as.character(bigram_freq$word)
+    timestamp()
+    for (i in 1:nrow(bigram_freq)){
+        testWord <- strsplit(bigram_freq$word[i], " ")[[1]][1]
+        bigram_freq$prob[i] <- nextWord(testWord, "", T)$prob
+    }
+    timestamp()
+    save(bigram_freq,file="bigram_TEST.Rda")
+    
+    Ps <- sum(log2(filter(bigram_freq, prob>0)$prob))
+    M <- sum(bigram_freq$freq)
+    2^(-Ps/M)
+    
+    trigram <- TermDocumentMatrix(corpusTest, control = list(tokenize = TrigramTokenizer))
+    #trigram <- removeSparseTerms(trigram, 0.6)
+    trigram_freq <- freq_df(trigram)
+    trigram_freq$word <- as.character(trigram_freq$word)
+    timestamp()
+    for (i in 1:nrow(trigram_freq)){
+        firstWord <- strsplit(trigram_freq$word[i], " ")[[1]][1]
+        secondWord <- strsplit(trigram_freq$word[i], " ")[[1]][2]
+        trigram_freq$prob[i] <- nextWord(firstWord, secondWord, T)$prob
+    }
+    timestamp()
+    
+    Ps <- sum(log2(filter(triram_freq, prob>0)$prob))
+    M <- sum(trigram_freq$freq)
+    2^(-Ps/M)
+    save(trigram_freq,file="trigram_TEST.Rda")
+    
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

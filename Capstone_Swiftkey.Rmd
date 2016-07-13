@@ -1,0 +1,240 @@
+---
+title: "Capstone_Swiftkey"
+author: "Gustavo Lobo"
+date: "11 de junio de 2016"
+output: html_document
+---
+
+# Introduction
+ 
+# Required libraries
+```{r setup, message=FALSE}
+    library(tm)
+    library(ggplot2)
+    library(wordcloud)
+    library(dplyr)
+    library(quanteda)
+```
+
+# Exploratory data analisis
+
+Attempts to use the entire dataset failed myserably, causing RStudio to crash every time. So, as recommended, a binomial sampling was first used with just 5% of the original data. In order to do this, the files of twiter, blogs and news were loaded separetely, and then sampled to finally write the results in considerable less heavy files.
+
+```{r loadData, warning=FALSE, cache=TRUE}
+    ## 1. Load data
+    twitFile <- readLines("final/en_US/en_US.twitter.txt")
+    blogFile <- readLines("final/en_US/en_US.blogs.txt")
+    newsFile <- readLines("final/en_US/en_US.news.txt")
+
+    ### 1.1 Summary of the source files (size, lines, words)
+    twitSize <- object.size(twitFile)/1064/1064
+    twitLines <- length(twitFile)
+    twitWords <- sum(sapply(gregexpr("\\S+", twitFile), length))
+    
+    blogSize <- object.size(blogFile)/1064/1064
+    blogLines <- length(blogFile)
+    blogWords <- sum(sapply(gregexpr("\\S+", blogFile), length))
+    
+    newsSize <- object.size(newsFile)/1064/1064
+    newsLines <- length(newsFile)
+    newsWords <- sum(sapply(gregexpr("\\S+", newsFile), length))
+    
+    paste("Twiter:", twitSize, twitLines, twitWords)
+    paste("Blog:", blogSize, blogLines, blogWords)
+    paste("News:", newsSize, newsLines, newsWords)
+    
+    ### 1.2 Create a sample of the dataset
+    getSample <- function(data, percent) {
+        lines <- length(data)
+        return(data[as.logical(rbinom(lines,1,percent))])
+    }
+    
+    twitSample <- getSample(twitFile, 0.1)
+    blogSample <- getSample(blogFile, 0.1)
+    newsSample <- getSample(newsFile, 0.1)
+    
+    ### 1.1 Summary of the sample files
+    twitSize_sample <- object.size(twitSample)/1064/1064
+    twitLines_sample <- length(twitSample)
+    twitWords_sample <- sum(sapply(gregexpr("\\S+", twitSample), length))
+    
+    blogSize_sample <- object.size(blogSample)/1064/1064
+    blogLines_sample <- length(blogSample)
+    blogWords_sample <- sum(sapply(gregexpr("\\S+", blogSample), length))
+    
+    newsSize_sample <- object.size(newsSample)/1064/1064
+    newsLines_sample <- length(newsSample)
+    newsWords_sample <- sum(sapply(gregexpr("\\S+", newsSample), length))
+    
+    paste("Twiter:", twitSize_sample, twitLines_sample, twitWords_sample)
+    paste("Blog:", blogSize_sample, blogLines_sample, blogWords_sample)
+    paste("News:", newsSize_sample, newsLines_sample, newsWords_sample)
+    
+    dir.create("sample", showWarnings = FALSE)
+
+    write(twitSample, "sample/twitSample.txt")
+    write(blogSample, "sample/blogSample.txt")
+    write(newsSample, "sample/newsSample.txt")
+        
+    dName <- file.path("~", "Documents/Coursera/Capstone", "sample")
+    docsUS <- Corpus(DirSource(dName))
+```
+
+After a short searching and reading of the additional sources provided by the instructors, it seems clear that aditional steps must be taken into account to remove unwanted characters and do the analysis properly (see references). The following pre-procesing steps were done with the help of the "tm" package:
+    - remove puntuation
+    - convert to lowercase
+    - remove unnecesary whitespace
+    - remove numbers
+    - remove terms/words that are very sparse (maximum sparcity of 0.8)
+    - remove stopwords (just to campare results)
+
+```{r cleanData, cache=TRUE}
+    ## 2. Cleanup the data
+    docsUS <- tm_map(docsUS, removePunctuation)
+    docsUS <- tm_map(docsUS, tolower)
+    docsUS <- tm_map(docsUS, stripWhitespace)
+    docsUS <- tm_map(docsUS, PlainTextDocument) 
+    docsUS <- tm_map(docsUS, removeNumbers)
+```
+
+Note that "stemming" and removing "stopwords" weren't done after consider that the objetive of the project is to predict the next word or letter to be inputed by the user, and "stopwords" and common endings could be as valid as any other input.
+
+```{r dtm, cache=TRUE}
+    ## 3. Create document term matrix
+    dtmUS <- DocumentTermMatrix(docsUS)
+
+    ## 4. Remove less common words
+    dtmUS_RS <- removeSparseTerms(dtmUS, 0.1)
+```
+
+After creating the document term matrix and removing the less frequent words, the first analysis is to see which are the less (remaining) and most common words.
+
+```{r freq_mostless, cache=TRUE}
+    ## 5. Analysis of word frequency
+
+    ### 5.1 Most and less frequent words
+    freqUS_RS <- colSums(as.matrix(dtmUS_RS))
+    ordUS_RS <- order(freqUS_RS)
+    freqUS_RS[tail(ordUS_RS)]
+    freqUS_RS[head(ordUS_RS)]
+```
+
+As expected, the most common words are stopwords. Also can be observed that any word with a frequency less than 2 was removed. But, what is the distribution of the frequencies of the remaining words? In order to find this, the dataset was divided in groups according to the word frequency divided by 100. For example, we can see that the majority of the words has a frequency between 0 and 99 ocurrencies, which is also sort of expected.
+    
+```{r relFreq, cache=TRUE}
+    ### 5.2 Relative frequency of words (by groups of 100) 
+    dfFreq_RS <- data.frame(table(freqUS_RS))
+    dfFreq_RS$group<-as.integer(as.numeric(dfFreq_RS$freqUS_RS)/100)
+    dfFreq_RS %>% 
+        group_by(group) %>% 
+        summarise(Frequency = sum(Freq))
+```
+
+Another look at the data is done with the help of an histogram and a word cloud, in which the relative frequency of the words with more than 10000 ocurrencies are compared.
+    
+```{r plots, cache=TRUE}
+    ### 5.3 Histogram
+    dfUS_RS <- data.frame(word=names(freqUS_RS), freqUS_RS=freqUS_RS) 
+    plotUS_RS <- ggplot(subset(dfUS_RS, freqUS_RS>10000), aes(word, freqUS_RS))    
+    plotUS_RS <- plotUS_RS + geom_bar(stat="identity")   
+    plotUS_RS <- plotUS_RS + theme(axis.text.x=element_text(angle=45, hjust=1))   
+    plotUS_RS
+
+    ### 5.4 Wordcloud
+    set.seed(142)
+    wordcloud(names(freqUS_RS), freqUS_RS, min.freq=10000, scale=c(5, .1), colors=brewer.pal(6, "Dark2"))
+```
+
+I can't hold my curiosity back, so after all I replicated the analysis excluding the stopwords.
+
+```{r dtmNoStop, cache=TRUE}
+    ## 5. Analyze word frequency (exluding stopwords)
+    ### 5.1 Remove stopwords and create document term matrix
+    docsUS_noStop <- tm_map(docsUS, removeWords, stopwords("english"))
+    dtmUS_noStop <- DocumentTermMatrix(docsUS_noStop)
+    
+    ### 5.2 Remove less common words
+    dtmUS_RS_noStop <- removeSparseTerms(dtmUS_noStop, 0.1)
+    
+    ### 5.3 Most and less frequent words
+    freqUS_RS_noStop <- colSums(as.matrix(dtmUS_RS_noStop))  
+    ordUS_RS_noStop <- order(freqUS_RS_noStop)
+    freqUS_RS_noStop[tail(ordUS_RS_noStop)]
+    freqUS_RS_noStop[head(ordUS_RS_noStop)]
+  
+    ## 5.4 Relative frequency of words (by groups of 100) 
+    dfFreq_RS_noStop <- data.frame(table(freqUS_RS_noStop))
+    dfFreq_RS_noStop$group<-as.integer(as.numeric(dfFreq_RS_noStop$freqUS_RS_noStop)/100)
+    dfFreq_RS_noStop %>% 
+        group_by(group) %>% 
+        summarise(Frequency = sum(Freq))
+    
+    ## 5.5 Histogram
+    dfUS_RS_noStop <- data.frame(word=names(freqUS_RS_noStop), freqUS_RS_noStop=freqUS_RS_noStop) 
+    plotUS_RS_noStop <- ggplot(subset(dfUS_RS_noStop, freqUS_RS_noStop>5000), aes(word, freqUS_RS_noStop))    
+    plotUS_RS_noStop <- plotUS_RS_noStop + geom_bar(stat="identity")   
+    plotUS_RS_noStop <- plotUS_RS_noStop + theme(axis.text.x=element_text(angle=45, hjust=1))
+    plotUS_RS_noStop 
+    
+    ## 5.6 Wordcloud
+    set.seed(142)
+    wordcloud(names(freqUS_RS_noStop), freqUS_RS_noStop, min.freq=5000, scale=c(5, .1), colors=brewer.pal(6, "Dark2"))
+```
+
+# Building the model
+
+The package "quanteda" is used to build the n-grams (first I tried the "RWeka" package, but I had a lot of trouble making it work with RStudio on MacOS due to some issue with the Java version).
+
+``` {r n-gram, cache=TRUE}
+    ## 6. Create corpus
+    corUS <- corpus(textfile(list.files("sample", full.names = T)))
+```
+
+```{r bigram, cache=TRUE}
+    ## 6.1 Create bigram
+    bigramUS <- dfm(corUS, ngrams = 2, verbose = F)
+
+    ## 6.2 Create dataframe
+    bigram_freq <- data.frame(freq=colSums(bigramUS))
+    bigram_freq$word <- rownames(bigram_freq)   
+
+    ## 6.3 Plot frequency
+    plotUS_bi <- ggplot(subset(bigram_freq, freq>300), aes(word, freq))   
+    plotUS_bi <- plotUS_bi + geom_bar(stat="identity")
+    plotUS_bi <- plotUS_bi + theme(axis.text.x=element_text(angle=45, hjust=1))
+    plotUS_bi
+```
+
+```{r trigram, cache=TRUE}
+    ## 6.4 Create bigram
+    trigramUS <- dfm(corUS, ngrams = 3, verbose = F)
+    
+    ## 6.5 Create dataframe
+    trigram_freq <- data.frame(freq=colSums(trigramUS))
+    trigram_freq$word <- rownames(trigram_freq)
+    
+    ## 6.6 Plot frequency
+    plotUS_tri <- ggplot(subset(trigram_freq, freq>40), aes(word, freq))   
+    plotUS_tri <- plotUS_tri + geom_bar(stat="identity")
+    plotUS_tri <- plotUS_tri + theme(axis.text.x=element_text(angle=45, hjust=1))
+    plotUS_tri
+```
+
+# Next Steps
+
+The bigram and trigram calculation is far from reasonable, the first thing I have to figure it out is how to reduce the time required to process this data without losing relevant information. I had to reduce considerably the sample size just to figure it out if the algorithm was working at all. Until now I have thinked of the following alternatives:
+1. eliminate numbers, whitespaces first, and then sample from a cleaner dataset
+2. take a different sample size from twits, news and blogs, since each element has very different number of elements and each element (i guess) has very different number of rows (this I have to check it out).
+3. use other packages to compare performance over small samples.
+
+Regarding the algorithm to make the recomendation, I guess it should be done by steps, first recommend a second word given the first, and then the third given the second and the first (this sounds too bayesian to me, but at this point I don't know if it could be done that way). For the bigrams and trigrams not present in the sample, I was thinking that maybe I can make use of that stemming functionallity. Other tought that crossed my mind is that since there is a big difference between using or not stopwords, an aditional step may be detecting if the word is an stop word and proceeding acconrdingly, but this also will require to double the analysis, so the previous step of optimizing the algorithm will be very important.
+
+Finally, to measure the accuracy, for the moment the only alternative I had thinked of is to count how many words away was the selected word from the recommended (given that I can present an ranked words to the user).
+
+# References
+ - Basic Text Mining in R. Site: https://rstudio-pubs-static.s3.amazonaws.com/31867_8236987cf0a8444e962ccd2aec46d9c3.html
+ - Text Mining the Complete Works of William Shakespeare. Site: http://www.r-bloggers.com/text-mining-the-complete-works-of-william-shakespeare/
+ - Introduction to basic Text Mining in R. Site: http://www.unt.edu/rss/class/Jon/Benchmarks/TextMining_L_JDS_Jan2014.pdf
+ - R Programming/Text Processing. Site: https://en.wikibooks.org/wiki/R_Programming/Text_Processing
+ - What algorithm I need to find n-grams?. Site: http://stackoverflow.com/questions/8161167/what-algorithm-i-need-to-find-n-grams
+ - Getting Started with quanteda. Site: https://cran.r-project.org/web/packages/quanteda/vignettes/quickstart.html
