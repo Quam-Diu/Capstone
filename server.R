@@ -8,19 +8,20 @@
 # 2. Adquiring data and initial processing
     
     # 2.1 Download and unzip the data file
-        bigramFreq <- tempfile()
-        trigramFreq <- tempfile()
-        download.file("https://github.com/Quam-Diu/Capstone/blob/master/bigram_top_freq.Rda", bigramFreq)
-        download.file("https://github.com/Quam-Diu/Capstone/blob/master/trigram_top_freq.Rda", trigramFreq)
-        
 
+        biUrl <- "https://github.com/Quam-Diu/Capstone/blob/master/bigram_top_freq.csv?raw=true"
+        bigram.df <- read.table(biUrl, header = TRUE, sep = ",")
+        
+        triUrl <-"https://github.com/Quam-Diu/Capstone/blob/master/trigram_top_freq.Rda?raw=true"
+        bigram.df <- load(biUrl)
+        
     
     #2.2 Data tyding 
     
     #2.3 Load data as dataframe
         #2.3.1 Initial loading
-        bigram.df <- load(bigramFreq)
-        trigram.df <- load(trigramFreq)
+        bigram.df <- load(biCon)
+        trigram.df <- load(triCon)
 
 #3. Server
     shinyServer(function(input, output, session) {
