@@ -10,18 +10,16 @@
     # 2.1 Download and unzip the data file
 
         biUrl <- "https://github.com/Quam-Diu/Capstone/blob/master/bigram_top_freq.csv?raw=true"
-        bigram.df <- read.table(biUrl, header = TRUE, sep = ",")
+        bigram_top <- read.table(biUrl, header = TRUE, sep = ",")
         
-        triUrl <-"https://github.com/Quam-Diu/Capstone/blob/master/trigram_top_freq.Rda?raw=true"
-        bigram.df <- load(biUrl)
+        triUrl <-"https://github.com/Quam-Diu/Capstone/blob/master/trigram_top_freq.csv?raw=true"
+        trigram_top <- read.table(triUrl, header = TRUE, sep = ",")
         
     
     #2.2 Data tyding 
     
     #2.3 Load data as dataframe
         #2.3.1 Initial loading
-        bigram.df <- load(biCon)
-        trigram.df <- load(triCon)
 
 #3. Server
     shinyServer(function(input, output, session) {
@@ -88,23 +86,17 @@
             
         }
         
-        inputText <- reactive({input$textInput})
-        
-    #3.1 User interfaces
-        #3.1.1 Countries (Central America and Mexico pre-selected)
-            output$words <- renderUI({
-                textInput("text", label = h3("Type one or two words..."), 
-                          value = "Enter text...")
-            })
-    
-    #3.2 Outputs
-        
-        #3.2.2 Text explaining the selected indicator
-            text <- reactive(output$words)
+        v<- function() {
+            w1 <- strsplit(input$words,split=" ")[[1]][1]
+            w2 <- strsplit(input$words,split=" ")[[1]][2]
             
-            output$wordRec <- renderText({
-
-            })
+            return(nextWord(w1, w2, TRUE))  
+        }
+        
+        output$recWords <- 
+            renderText( 
+                v()
+                     ) 
             
     
 
