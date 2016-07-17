@@ -8,7 +8,12 @@ library(shiny)
 shinyUI(
         pageWithSidebar(
             headerPanel("Predict next word..."),
-            sidebarPanel(textInput("words", "Type one or two words...")),
-            mainPanel( textOutput("recWords"))
+            sidebarPanel(
+                textInput("words", "Type some words..."),
+                helpText("You can type more than two words, but the prediction will always be based on the last two..."),
+                helpText("The first time loading the data takes a few seconds, please be patient...")),
+            mainPanel(
+                textOutput("recWords")
+                )
         )
     )

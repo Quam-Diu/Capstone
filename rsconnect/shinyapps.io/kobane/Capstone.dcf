@@ -1,0 +1,10 @@
+name: Capstone
+account: kobane
+server: shinyapps.io
+appId: 114856
+bundleId: 506860
+url: https://kobane.shinyapps.io/Capstone/
+when: 1468713495.37949
+asMultiple: FALSE
+asStatic: FALSE
+ignoredFiles: Capstone_Swiftkey.Rmd
