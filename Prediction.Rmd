@@ -1,0 +1,157 @@
+---
+title: "Prediction"
+author: "Gustavo Lobo"
+date: "16 de julio de 2016"
+output: html_document
+---
+
+## Prediction function
+
+Below is the function to predict the next word given one or two previous words. The function takes the following parameters:
+- firstWord: the first word used as input
+- secondWord: the second word used as input, if just one word is provided, takes the default value of ""
+- onlytheBest: is a boolean parameter, if it is specified as TRUE, returns the best word according to the probabilities calculated by the function; if it is specified as FALSE, returns a short list of words that can be used as alternatives for the prediction
+
+If a prediction can't be made giver the first or the second words, the value 'ukn' is returned.
+
+```{r prediction}
+
+    nextWord <- function(firstWord, secondWord="", onlytheBest=FALSE) {
+        # Defines a unigram with the first of the given words
+        # unigram1 <- paste("^", firstWord, " ", sep = "")
+        
+        # Step# 1: Defines a bigram with the two given words and searches for it on trigrams
+        bigramCount <- wordCount[1,2]
+        trigramCount <- wordCount[2,2]
+        SWt1 <- data.frame(word="ukn", freq=1, prob=1/trigramCount)
+        SWb1 <- data.frame(word="ukn", freq=1, prob=1/bigramCount)
+        SWb2 <- data.frame(word="ukn", freq=1, prob=1/bigramCount)
+        SWb3 <- data.frame(word="ukn", freq=1, prob=1/bigramCount)
+        
+        if (firstWord != "" & secondWord == "") {
+            unigram <- paste("^", firstWord, " ", sep = "")
+            ftUnigram <- bigram_top[grepl(unigram, bigram_top$word), ]
+            if (nrow(ftUnigram)>0) {
+                SWb1 <- ftUnigram[which(ftUnigram$freq == max(ftUnigram$freq)), ]
+                SWb1$prob <- 0.4 * SWb1$freq / sum(ftUnigram$freq)
+                SWb1$word <- tail(strsplit(SWb1$word,split=" ")[[1]],1)
+            }
+            result <- SWb1
+        } else {
+            if (firstWord != "" & secondWord != "") {
+                trigram <- paste("^", firstWord, " ", secondWord, " ", sep = "")
+                ftTrigram <- trigram_top[grepl(trigram, trigram_top$word), ]
+            
+                bigram <- paste("\\<", firstWord, " ", secondWord, "\\>", sep = "")
+                ftBigram <- bigram_top[grepl(bigram, bigram_top$word), ]
+                
+                if (nrow(ftBigram) > 0 & nrow(ftTrigram) > 0) {
+                    SWt1 <- ftTrigram[which(ftTrigram$freq == max(ftTrigram$freq)), ]
+                    SWt1$prob <- SWt1$freq / ftBigram$freq
+                    SWt1$word <- as.character(SWt1$word)
+                    SWt1$word <- tail(strsplit(SWt1$word, split=" ")[[1]],1)
+                } else {
+                    unigram <- paste("^", firstWord, " ", sep = "")
+                    ftUnigram <- bigram_top[grepl(unigram, bigram_top$word), ]
+                    if (nrow(ftBigram) > 0 & nrow(ftUnigram)>0) {
+                        SWb2 <- ftBigram[which(ftBigram$freq == max(ftBigram$freq)), ]
+                        SWb2$prob <- 0.4 * SWb2$freq / sum(ftUnigram$freq)
+                        SWb2$word <- as.character(SWb2$word)
+                        SWb2$word <- tail(strsplit(SWb2$word,split=" ")[[1]],1)
+                    }  
+                }
+            }
+            if (secondWord != "") {
+                unigram <- paste("^", secondWord, " ", sep = "")
+                ftUnigram <- bigram_top[grepl(unigram, bigram_top$word), ]
+                if (nrow(ftUnigram)>0) {
+                    SWb3 <- ftUnigram[which(ftUnigram$freq == max(ftUnigram$freq)), ]
+                    SWb3$prob <- 0.4 * SWb3$freq / sum(ftUnigram$freq)
+                    SWb3$word <- as.character(SWb3$word)
+                    SWb3$word <- tail(strsplit(SWb3$word,split=" ")[[1]],1)
+                }
+            }
+            result <- rbind(SWt1, SWb2, SWb3)
+            if (onlytheBest) {
+                result <- result[which(result$prob == max(result$prob)), ][1,]  
+            }
+        }
+        
+        return(result)
+                
+    }
+
+```
+
+## References
+
+To test the capabilities of the model, we used the test dataset, which is an independent sample taken from the original dataset. The sample size is just 0.01% of the total test dataset, althougth it may look small there were arround 10.000 sentences among bigrams and trigrams. 
+
+``` {r test_model}
+    
+    sampleSize <- 0.0001
+    twitSample <- readLines("test/twitTest.txt")
+    twitSample <- sample(twitSample, sampleSize*length(twitSample))
+    Encoding(twitSample) <- "latin1"
+    twitSample <- iconv(twitSample, "latin1", "ASCII", sub="")
+    
+    blogSample <- readLines("test/blogTest.txt")
+    blogSample <- sample(blogSample, sampleSize*length(blogSample))
+    Encoding(blogSample) <- "latin1"
+    blogSample <- iconv(blogSample, "latin1", "ASCII", sub="")    
+    
+    newsSample <- readLines("test/newsTest.txt")
+    newsSample <- sample(newsSample, sampleSize*length(newsSample))
+    Encoding(newsSample) <- "latin1"
+    newsSample <- iconv(newsSample, "latin1", "ASCII", sub="")
+    
+    dir.create("model_test", showWarnings = FALSE)
+
+    write(twitSample, "model_test/twitSample.txt") 
+    write(blogSample, "model_test/blogSample.txt") 
+    write(newsSample, "model_test/newsSample.txt")
+    
+    remove(sampleSize, twitSample, blogSample, newsSample)
+    
+    dName <- file.path("~", "Documents/Coursera/Capstone", "model_test")
+    corpusTest <- Corpus(DirSource(dName))
+    corpusTest <- tm_map(corpusTest, content_transformer(PlainTextDocument))
+    corpusTest <- tm_map(corpusTest, content_transformer(removePunctuation))
+    corpusTest <- tm_map(corpusTest, content_transformer(tolower))
+    corpusTest <- tm_map(corpusTest, content_transformer(removeNumbers))
+    corpusTest <- tm_map(corpusTest, content_transformer(stripWhitespace))
+    
+    bigram <- TermDocumentMatrix(corpusTest, control = list(tokenize = BigramTokenizer))
+    #bigram <- removeSparseTerms(bigram, 0.6)
+    bigram_freq <- freq_df(bigram)
+    bigram_freq$word <- as.character(bigram_freq$word)
+    timestamp()
+    for (i in 1:nrow(bigram_freq)){
+        testWord <- strsplit(bigram_freq$word[i], " ")[[1]][1]
+        bigram_freq$prob[i] <- nextWord(testWord, "", T)$prob
+    }
+    timestamp()
+    save(bigram_freq,file="bigram_TEST.Rda")
+    
+    Ps <- sum(log2(filter(bigram_freq, prob>0)$prob))
+    M <- sum(bigram_freq$freq)
+    2^(-Ps/M)
+    
+    trigram <- TermDocumentMatrix(corpusTest, control = list(tokenize = TrigramTokenizer))
+    #trigram <- removeSparseTerms(trigram, 0.6)
+    trigram_freq <- freq_df(trigram)
+    trigram_freq$word <- as.character(trigram_freq$word)
+    timestamp()
+    for (i in 1:nrow(trigram_freq)){
+        firstWord <- strsplit(trigram_freq$word[i], " ")[[1]][1]
+        secondWord <- strsplit(trigram_freq$word[i], " ")[[1]][2]
+        trigram_freq$prob[i] <- nextWord(firstWord, secondWord, T)$prob
+    }
+    timestamp()
+    
+    Ps <- sum(log2(filter(triram_freq, prob>0)$prob))
+    M <- sum(trigram_freq$freq)
+    2^(-Ps/M)
+    save(trigram_freq,file="trigram_TEST.Rda")
+    
+```

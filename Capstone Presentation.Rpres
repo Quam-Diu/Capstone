@@ -1,0 +1,64 @@
+Next Word Prediction
+========================================================
+author: Gustavo Lobo Aguilar
+date: July 2016
+autosize: true
+
+Goal
+========================================================
+
+Our goal is that given a short sentence of one or two words
+make a recommendation about the next word that may complete 
+the sentence.
+
+- Data: Text collected by a webcrawler and classified by source type 
+(twits, news or blogs) and language (we are going to use only the English part). 
+
+    Source: https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip
+- Prediction algorithm: We developed a simple model that recommends 
+the next word from a one or two word sentence, for this we used the 
+"stupid backoff" algorithm.
+
+    Source: http://www.aclweb.org/anthology/D07-1090.pdf
+- Model accuracy: We tested the accuracy of the model calculating the 
+preplexity index of a random sample of the test dataset.
+
+    Source: https://ufal.mff.cuni.cz/mtm13/files/10-lm-marcello-federico.pdf
+
+The model
+========================================================
+
+A general description of the model is as follows:
+
+1. Divide data into train, test and validation datasets.
+
+2. For the test dataset count bigram and trigram frequencies and remove sparce data.
+
+3. Implement 'stupid backoff' to predict the next word.
+    Cabeat: Also, if two words are given, recommend a third word based only on the second word.
+    
+4. For a sample of the test dataset, calculate the perplexity index for bigrams and
+trigrams on the sample.
+
+A detailed explanation can be found here: 
+
+https://github.com/Quam-Diu/Capstone
+
+General results
+========================================================
+
+I obtained a perplexity index of 21.53405 for bigrams and 21.56388 for trigrams, I do not have
+a benchmark to compare this results, but as far as I can tell from the research I had done to this
+project, is not that bad.
+
+Furher developments of this model may include the analysis of stop words, maybe splitting the recommendation depending if the second word is a stop word or not. I also want to play with the idea of using sparse sentences, instead of dropping them off stemmizing them to extract the more "juice" I can from the train data.
+
+
+Shiny App
+========================================================
+
+You can see the results of the model in the Shiny App linked below.
+
+https://kobane.shinyapps.io/Capstone/
+
+To use it just type some words on the input box, you can type more but the prediction will always be based on the last two.
